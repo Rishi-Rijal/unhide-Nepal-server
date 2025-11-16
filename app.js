@@ -45,10 +45,13 @@ app.use("/api/v1/listing", listingRouter);
 //app.use("/api/v1/users", userRouter);
 
 app.use((err, req, res, next) => {
+    console.error(err);
     const statusCode = err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
 
-    res.status(statusCode).json({ message });
+    res.status(statusCode).json({
+        success: false,
+        message: err.message || "Internal Server Error",
+    });
 });
 
 export { app }

@@ -314,7 +314,7 @@ const getListingFiltered = AsyncHandler(async (req, res) => {
 
     res.json({ data, nextCursor, hasNextPage });
   } catch (err) {
-    throw ApiError(500, 'Failed to fetch listings');
+    throw new ApiError(500, 'Failed to fetch listings');
   }
 });
 

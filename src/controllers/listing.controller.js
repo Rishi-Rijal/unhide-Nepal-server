@@ -1,17 +1,16 @@
 import Listing from '../models/listing.model.js';
 import ApiError from '../utils/ApiError.js';
-import AsyncHandler from '../utils/AsyncHandler.js';
+import AsyncHandler from "../utils/asyncHandler.js"
 import { uploadOnCloudinary } from '../utils/uploadCloudinary.js';
 import { z } from "zod";
 import mongoose from "mongoose";
 
 /* ---------- validation helpers ---------- */
 
-const stringOrArray = z
-  .union([
-    z.string().min(1).transform(v => v.trim()),
-    z.array(z.string().min(1).transform(v => v.trim()))
-  ])
+const stringOrArray = z.union([
+  z.string().min(1).transform(v => v.trim()),
+  z.array(z.string().min(1).transform(v => v.trim()))
+])
   .optional()
   .transform(v => (Array.isArray(v) ? v : v ? [v] : []));
 
@@ -46,7 +45,7 @@ const querySchema = z.object({
 // create a new listing
 
 const createListing = AsyncHandler(async (req, res) => {
-  const { name, description, categories, tags, latitude, longitude, tipsPermits, tripsBestSeason, tripsDifficulty, tipsExtra } = req.body;
+  const { name, description, categories, tags, latitude, longitude, tipsPermits, tipsBestSeason, tipsDifficulty, tipsExtra } = req.body;
   if (!name || !description || !categories || !latitude || !longitude) {
     throw new ApiError(400, 'Please provide all required fields');
   }
@@ -72,10 +71,13 @@ const createListing = AsyncHandler(async (req, res) => {
     tags,
     location,
     images: imagesInfo,
-    extraAdvice: tipsExtra || ""
+    extraAdvice: tipsExtra || "",
+    bestSeason: tipsBestSeason,
+    difficulty: tipsDifficulty,
+    permits: tipsPermits
   });
 
-  const createdListing = Listing.findById(newListing._id);
+  const createdListing = await Listing.findById(newListing._id);
   if (!createdListing) {
     throw new ApiError(500, 'Failed to create listing');
   }
@@ -94,7 +96,6 @@ const getListing = AsyncHandler(async (req, res) => {
   if (!listing) {
     throw new ApiError(404, 'Listing not found');
   }
-
   res.status(200).json(listing);
 });
 
@@ -318,4 +319,56 @@ const getListingFiltered = AsyncHandler(async (req, res) => {
   }
 });
 
-export { createListing, getListings, getListing, updateListing, deleteListing, getListingFiltered };
+const likeListing = AsyncHandler(async (req, res) => {
+  const { id } = req.params;
+  if (!id) {
+    throw new ApiError(401, "id is required");
+  }
+
+  const updatedListing = await Listing.findByIdAndUpdate(
+    id,
+    { $inc: { likesCount: 1 } },
+    { new: true }
+  );
+
+  if (!updatedListing) {
+    throw new ApiError(400, "Listing not found")
+  }
+  res.status(200).json({
+    message: "Like added successfully",
+    data: updatedListing
+  });
+})
+
+const unlikeListing = AsyncHandler(async (req, res) => {
+  const { id } = req.params;
+  if (!id) {
+    throw new ApiError(400, "id is required")
+  }
+  const updatedListing = await Listing.findByIdAndUpdate(
+    id,
+    { $inc: { likesCount: -1 } },
+    { new: true }
+  );
+
+  if (!updatedListing) {
+    throw new ApiError(400, "Listing not found")
+  }
+  res.status(200).json({
+    message: "Like added successfully",
+    data: updatedListing
+  });
+
+
+})
+
+export {
+  createListing,
+  getListings,
+  getListing,
+  updateListing,
+  deleteListing,
+  getListingFiltered,
+  likeListing,
+  unlikeListing
+};

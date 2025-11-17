@@ -1,30 +1,38 @@
 import mongoose from "mongoose";
 
 const CATEGORY_ENUM = [
-  "Nature","Adventure","Culture","Spiritual","Wildlife","Relaxation","Lifestyle","Themes",
+  "Nature", "Adventure", "Culture", "Spiritual", "Wildlife", "Relaxation", "Lifestyle", "Themes",
 ];
 
 const TAGS = [
-  "Mountains","Hills","Lakes","Rivers","Waterfalls","Forests","National Parks","Caves",
-  "Viewpoints","Sunrise Spots","Trekking","Hiking","Rafting","Kayaking","Paragliding",
-  "Bungee Jumping","Zipline","Rock Climbing","Mountain Biking","Camping","Canyoning",
-  "Heli Tour","Temples","Monasteries","Stupas","Heritage Sites","Museums","Palaces",
-  "Festivals","Local Villages","Traditions","Crafts","Architecture","Food & Cuisine",
-  "Cultural Shows","Meditation","Yoga Retreats","Pilgrimage","Spiritual Centers",
-  "Holy Sites","Peace Pagodas","Monastic Life","Safari","Bird Watching","Nature Walks",
-  "Conservation Areas","Eco Tours","Jungle Walk","Tiger Spotting","Elephant Breeding Center",
-  "Resorts","Spa & Wellness","Hot Springs","Lakeside Leisure","Luxury Lodges",
-  "Countryside Retreats","Riverside Camping","Sunset Views","Homestays","Cooking Classes",
-  "Tea Gardens","Local Markets","Shopping","Nightlife","Community Tourism","Volunteering",
-  "Family Travel","Solo Travel","Honeymoon","Luxury Travel","Budget Travel",
-  "Offbeat Experiences","Photography","Festival Travel","Eco Tourism","Adventure Seekers",
+  "Mountains", "Hills", "Lakes", "Rivers", "Waterfalls", "Forests", "National Parks", "Caves",
+  "Viewpoints", "Sunrise Spots", "Trekking", "Hiking", "Rafting", "Kayaking", "Paragliding",
+  "Bungee Jumping", "Zipline", "Rock Climbing", "Mountain Biking", "Camping", "Canyoning",
+  "Heli Tour", "Temples", "Monasteries", "Stupas", "Heritage Sites", "Museums", "Palaces",
+  "Festivals", "Local Villages", "Traditions", "Crafts", "Architecture", "Food & Cuisine",
+  "Cultural Shows", "Meditation", "Yoga Retreats", "Pilgrimage", "Spiritual Centers",
+  "Holy Sites", "Peace Pagodas", "Monastic Life", "Safari", "Bird Watching", "Nature Walks",
+  "Conservation Areas", "Eco Tours", "Jungle Walk", "Tiger Spotting", "Elephant Breeding Center",
+  "Resorts", "Spa & Wellness", "Hot Springs", "Lakeside Leisure", "Luxury Lodges",
+  "Countryside Retreats", "Riverside Camping", "Sunset Views", "Homestays", "Cooking Classes",
+  "Tea Gardens", "Local Markets", "Shopping", "Nightlife", "Community Tourism", "Volunteering",
+  "Family Travel", "Solo Travel", "Honeymoon", "Luxury Travel", "Budget Travel",
+  "Offbeat Experiences", "Photography", "Festival Travel", "Eco Tourism", "Adventure Seekers",
   "Wellness Travel"
 ];
 
 const listingSchema = new mongoose.Schema(
   {
-    name: { type: String, required: true, trim: true },
-    description: { type: String, required: true, trim: true },
+    name: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    description: {
+      type: String,
+      required: true,
+      trim: true
+    },
 
     categories: {
       type: [String],
@@ -56,18 +64,51 @@ const listingSchema = new mongoose.Schema(
       },
     },
 
-    images: [{ url: { type: String, trim: true }, public_id: String, format: String }],
+    images: [
+      {
+        url:
+        {
+          type: String,
+          trim: true
+        },
+        public_id: String,
+        format: String
+      }],
 
-    permitsRequired: { type: Boolean, default: false },
-    bestSeason: { type: String, trim: true },
-    difficulty: { type: String, enum: ["Easy", "Moderate", "Challenging"] },
-    extraAdvice: { type: String, trim: true },
-    isVerified: { type: Boolean, default: false },
+    permitsRequired: {
+      type: Boolean,
+      default: false
+    },
+    bestSeason: {
+      type: String,
+      trim: true
+    },
+    difficulty: {
+      type: String,
+      enum: ["Easy", "Moderate", "Challenging"]
+    },
+    extraAdvice: {
+      type: String,
+      trim: true
+    },
+    isVerified: {
+      type: Boolean,
+      default: false
+    },
 
     // Denormalized for fast filters/sorts
-    averageRating: { type: Number, default: 0 },   // 0..5
-    ratingsCount:  { type: Number, default: 0 },
-    likesCount:    { type: Number, default: 0 },
+    averageRating: {
+      type: Number,
+      default: 0
+    },   // 0..5
+    ratingsCount: {
+      type: Number,
+      default: 0
+    },
+    likesCount: {
+      type: Number,
+      default: 0
+    },
   },
   { timestamps: true }
 );

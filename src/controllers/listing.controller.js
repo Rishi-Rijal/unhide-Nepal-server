@@ -45,7 +45,9 @@ const querySchema = z.object({
 // create a new listing
 
 const createListing = AsyncHandler(async (req, res) => {
-  const { name, description, categories, tags, latitude, longitude, tipsPermits, tipsBestSeason, tipsDifficulty, tipsExtra } = req.body;
+  const { name, description, categories, tags,
+     latitude, longitude, tipsPermits,
+      tipsBestSeason, tipsDifficulty, tipsExtra, physicalAddress   } = req.body;
   if (!name || !description || !categories || !latitude || !longitude) {
     throw new ApiError(400, 'Please provide all required fields');
   }
@@ -74,7 +76,8 @@ const createListing = AsyncHandler(async (req, res) => {
     extraAdvice: tipsExtra || "",
     bestSeason: tipsBestSeason,
     difficulty: tipsDifficulty,
-    permits: tipsPermits
+    permits: tipsPermits,
+    physicalAddress: physicalAddress,
   });
 
   const createdListing = await Listing.findById(newListing._id);
@@ -264,6 +267,8 @@ const getListingFiltered = AsyncHandler(async (req, res) => {
         ratingsCount: 1,
         likesCount: 1,
         createdAt: 1,
+        location: 1,
+        physicalAddress: 1,
         ...(shouldRunGeoNear ? { distanceMeters: 1 } : {}),
       },
     });
@@ -324,8 +329,6 @@ const getListingFiltered = AsyncHandler(async (req, res) => {
         nextCursor = encode({ createdAt: last.createdAt, _id: last._id });
       }
     }
-
-
     res.json({ data, nextCursor, hasNextPage });
   } catch (err) {
     throw new ApiError(500, "Failed to fetch listings")

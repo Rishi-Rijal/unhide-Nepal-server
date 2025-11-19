@@ -115,6 +115,10 @@ const listingSchema = new mongoose.Schema(
         ref: 'User'
       }
     ],
+    physicalAddress: {
+      type: String,
+      trim: true
+    },
   },
   { timestamps: true }
 );

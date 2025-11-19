@@ -1,5 +1,10 @@
 import { Router } from "express";
-import { addReview, getReviewsByListingId } from "../controllers/review.controller.js";
+import {
+    addReview,
+    getReviewsByListingId,
+    updateReview,
+    deleteReview
+} from "../controllers/review.controller.js";
 
 const router = Router();
 
@@ -8,5 +13,10 @@ router
     .route("/:postId")
     .get(getReviewsByListingId)
     .post(addReview)
+
+router
+    .route("/:reviewId")
+    .patch(updateReview)
+    .delete(deleteReview);
 
 export default router

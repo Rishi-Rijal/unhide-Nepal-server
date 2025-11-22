@@ -107,9 +107,3 @@ Refer to the route files in `src/routes/` and controllers in `src/controllers/` 
 - Run the server locally with the `.env` configured and ensure the client is pointed to the correct `VITE_API_BASE_URL` when testing end-to-end flows.
 
 ---
-
-If you'd like, I can also:
-- add a `dev` script and example `nodemon.json`,
-- or generate a Postman collection / OpenAPI spec from the route files.
-
-Tell me which follow-up you'd like. 

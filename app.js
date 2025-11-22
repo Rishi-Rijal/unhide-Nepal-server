@@ -49,6 +49,7 @@ app.use(passport.initialize());
 import listingRouter from "./src/routes/listing.routes.js";
 import reviewRouter from "./src/routes/review.routes.js";
 import userRouter from "./src/routes/user.routes.js";
+import adminRouter from "./src/routes/admin.routes.js";
 
 app.get("/", (req, res) => {
     res.send("API is running...");
@@ -56,6 +57,7 @@ app.get("/", (req, res) => {
 app.use("/api/v1/listing", listingRouter);
 app.use("/api/v1/review", reviewRouter);
 app.use("/api/v1/user", userRouter);
+app.use("/api/v1/admin", adminRouter);
 
 //routes decleration
 //app.use("/api/v1/users", userRouter);

@@ -8,7 +8,7 @@ import Listing from "../models/listing.model.js"
 const addReview = asyncHandler(async (req, res) => {
 
     const { postId } = req.params;
-    const { userName, rating, reviewMsg } = req.body;
+    const { userName, rating, reviewMsg, authorId } = req.body;
     if (!postId) {
         throw new ApiError(400, "Listing is required to add a review");
     }
@@ -58,12 +58,18 @@ const addReview = asyncHandler(async (req, res) => {
         throw new ApiError(400, "cannot add review for the listing");
     }
 
-    const newReview = await Review.create({
+    const reviewPayload = {
         listingId: postId,
         userName,
         rating,
         reviewMsg
-    });
+    };
+
+    if (authorId !== undefined && authorId !== null && authorId !== "") {
+        reviewPayload.authorId = authorId;
+    }
+
+    const newReview = await Review.create(reviewPayload);
 
     const createdReview = await Review.findById(newReview._id);
 
@@ -81,7 +87,6 @@ const getReviewsByListingId = asyncHandler(async (req, res) => {
     }
 
     const reviews = await Review.find({ listingId: postId, isPublic: true });
-
     res.status(200).json({
         success: true,
         count: reviews.length,

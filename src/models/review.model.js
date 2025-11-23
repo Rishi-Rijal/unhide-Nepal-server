@@ -6,12 +6,11 @@ const reviewSchema = new mongoose.Schema({
         ref: 'Listing',
         required: true,
     },
-    // userId: { // I will add this filed later when I login is available for the user
-    //     type: mongoose.Schema.Types.ObjectId,
-    //     ref: 'User',
-    //     required: true,
-    //     index: true
-    // },
+    authorId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        index: true
+    },
 
     userName : { 
         type: String,

@@ -52,6 +52,8 @@ const createListing = AsyncHandler(async (req, res) => {
     throw new ApiError(400, 'Please provide all required fields');
   }
 
+  const author = req.user?._id;
+
   const location = {
     type: 'Point',
     coordinates: [longitude, latitude]
@@ -78,6 +80,7 @@ const createListing = AsyncHandler(async (req, res) => {
     difficulty: tipsDifficulty,
     permits: tipsPermits,
     physicalAddress: physicalAddress,
+    author,
   });
 
   const createdListing = await Listing.findById(newListing._id);

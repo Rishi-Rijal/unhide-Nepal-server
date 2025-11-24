@@ -15,6 +15,7 @@ import {
     removeImage,
     addImage,
     updateTagsAndCategories,
+    sendSuggestionEmail,
 } from "../controllers/listing.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import { verifyJWT, verifyAdmin, verifyAdminOrOwner } from "../controllers/auth.controller.js";
@@ -42,6 +43,10 @@ router
     .route("/:id/like")
     .post(likeListing)
     .patch(unlikeListing);
+
+router
+    .route("/:id/suggest")
+    .post(sendSuggestionEmail);
 
 router
     .route("/:id/description")

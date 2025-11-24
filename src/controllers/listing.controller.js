@@ -4,6 +4,8 @@ import AsyncHandler from "../utils/asyncHandler.js"
 import { uploadOnCloudinary, removeFromCloudinary } from '../utils/uploadCloudinary.js';
 import { z } from "zod";
 import mongoose from "mongoose";
+import nodemailer from 'nodemailer';
+import User from '../models/user.model.js';
 
 /* ---------- validation helpers ---------- */
 
@@ -555,6 +557,65 @@ const updateTagsAndCategories = AsyncHandler(async (req, res) => {
   });
 });
 
+const sendSuggestionEmail = AsyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { field, suggestion, name = "", email = "" } = req.body;
+  if (!field || !suggestion) {
+  throw new ApiError(400, 'Field and suggestion are required');
+  }
+
+  const listing = await Listing.findById(id).populate('author', 'email fullName');
+  if (!listing) {
+  throw new ApiError(404, 'Listing not found');
+  }
+
+  const owner = listing.author;
+  const recipient = "rishirijal2025@example.com";
+
+  // Log recipient choice for debugging
+  console.log(`[sendSuggestionEmail] listingId=${id} ownerEmail=${owner?.email || 'none'} chosenRecipient=${recipient}`);
+
+  const listingUrl = `${(process.env.FRONTEND_URL || '').replace(/\/$/, '')}/listing/${id}`;
+
+  const smtpPort = Number(process.env.SMTP_PORT) || 465;
+  const smtpSecure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : smtpPort === 465;
+
+  const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: smtpPort,
+  secure: smtpSecure,
+  auth: {
+    user: process.env.SMTP_EMAIL,
+    pass: process.env.SMTP_PASSWORD,
+  },
+  });
+
+  const subject = `Suggestion for listing: ${listing.name} — ${field}`;
+  const reporterInfo = (name || email) ? `${name}${email ? ` <${email}>` : ''}` : 'Anonymous';
+  const text = `A suggestion was submitted for listing "${listing.name}" (ID: ${id}).\n\nField: ${field}\nSuggestion:\n${suggestion}\n\nReporter: ${reporterInfo}\n\nListing: ${listingUrl}`;
+  const html = `
+  <p>A suggestion was submitted for listing <strong>${listing.name}</strong> (ID: ${id}).</p>
+  <p><strong>Field:</strong> ${field}</p>
+  <p><strong>Suggestion:</strong><br/>${suggestion.replace(/\n/g, '<br/>')}</p>
+  <p><strong>Reporter:</strong> ${reporterInfo}</p>
+  <p><a href="${listingUrl}">View listing</a></p>
+  `;
+
+  const mailOptions = {
+    from: `${process.env.EMAIL_FROM_NAME || 'Unhide Nepal'} <${process.env.SMTP_EMAIL}>`,
+    to: recipient,
+    subject,
+    text,
+    html,
+  };
+
+  await transporter.sendMail(mailOptions);
+
+  console.log('[sendSuggestionEmail] mail sent', { to: recipient, subject });
+
+  return res.status(200).json({ success: true, message: 'Suggestion submitted' });
+});
+
 export {
   createListing,
   getListings,
@@ -571,4 +632,5 @@ export {
   removeImage,
   addImage,
   updateTagsAndCategories,
+  sendSuggestionEmail,
 };

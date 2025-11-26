@@ -1,9 +1,9 @@
 import Listing from '../models/listing.model.js';
 import ApiError from '../utils/ApiError.js';
 import AsyncHandler from "../utils/asyncHandler.js"
-import { uploadOnCloudinary, removeFromCloudinary, uploadImages } from '../utils/uploadCloudinary.js';
-import nodemailer from 'nodemailer';
+import { uploadImages } from '../utils/uploadCloudinary.js';
 import { createListingSchema, filterListingsSchema, tipsSchema } from '../schemas/listing.schema.js';
+import sendEmail from '../utils/sendEmail.js';
 import {
 	createListingService,
 	getListingService,
@@ -13,6 +13,11 @@ import {
 	unlikeListingService,
 	updateDescriptionService,
 	updateTipsService,
+	updateTitleService,
+	removeImageService,
+	addImageService,
+	updateLocationService,
+	updateTagsAndCategoriesService,
 } from '../services/listing.services.js';
 import "dotenv/config";
 
@@ -33,7 +38,7 @@ const createListing = AsyncHandler(async (req, res) => {
 
 	const newListing = await createListingService({ ...parsedData.data, uploadedImages });
 
-	res.status(201).json({ message: 'Listing created successfully', data: newListing});
+	res.status(201).json({ message: 'Listing created successfully', data: newListing });
 });
 
 
@@ -58,7 +63,7 @@ const getListingFiltered = AsyncHandler(async (req, res) => {
 		throw new ApiError(400, errorMessage);
 	}
 	const listingsData = await getFilteredListingsService(parsed.data);
-	res.status(200).json({ message: 'Listings retrieved successfully', data: listingsData.data, nextCursor: listingsData.nextCursor, hasNextPage: listingsData.hasNextPage});
+	res.status(200).json({ message: 'Listings retrieved successfully', data: listingsData.data, nextCursor: listingsData.nextCursor, hasNextPage: listingsData.hasNextPage });
 
 });
 
@@ -87,9 +92,9 @@ const updateDescription = AsyncHandler(async (req, res) => {
 	if (!description) {
 		throw new ApiError(400, 'Description is required');
 	}
-	
+
 	const updatedListing = await updateDescriptionService(id, description);
-	res.status(200).json({message: "Description updated successfully", data: updatedListing});
+	res.status(200).json({ message: "Description updated successfully", data: updatedListing });
 });
 
 const updateTips = AsyncHandler(async (req, res) => {
@@ -118,23 +123,13 @@ const updateTips = AsyncHandler(async (req, res) => {
 const updateTitle = AsyncHandler(async (req, res) => {
 	const { id } = req.params;
 	const { title } = req.body;
+
 	if (!title) {
 		throw new ApiError(400, 'Title is required');
 	}
-	const updatedListing = await Listing.findByIdAndUpdate(
-		id,
-		{ name: title },
-		{ new: true }
-	);
+	const updatedListing = await updateTitleService(id, title);
 
-	if (!updatedListing) {
-		throw new ApiError(400, "Listing not found");
-	}
-
-	res.status(200).json({
-		message: "Title updated successfully",
-		data: updatedListing
-	});
+	res.status(200).json({ message: "Title updated successfully", data: updatedListing });
 });
 
 const removeImage = AsyncHandler(async (req, res) => {
@@ -143,14 +138,7 @@ const removeImage = AsyncHandler(async (req, res) => {
 	if (!public_id) {
 		throw new ApiError(400, 'public_id is required');
 	}
-	const listing = await Listing.findById(id);
-	if (!listing) {
-		throw new ApiError(400, "Listing not found");
-	}
-	listing.images = listing.images.filter(img => img.public_id !== public_id);
-	await removeFromCloudinary(public_id);
-	await listing.save();
-
+	const listing = await removeImageService(id, public_id);
 	res.status(200).json({
 		message: "Image removed successfully",
 		data: listing
@@ -163,22 +151,8 @@ const addImage = AsyncHandler(async (req, res) => {
 	if (images.length === 0) {
 		throw new ApiError(400, 'At least one image is required');
 	}
-	const listing = await Listing.findById(id);
-	if (!listing) {
-		throw new ApiError(400, "Listing not found");
-	}
-	const uploadedImages = await Promise.all(
-		images.map(async (image) => {
-			const uploadResult = await uploadOnCloudinary(image.path);
-			return {
-				url: uploadResult.secure_url,
-				public_id: uploadResult.public_id,
-			};
-		})
-	);
-
-	listing.images.push(...uploadedImages);
-	await listing.save();
+	const uploadedImages = await uploadImages(images);
+	const listing = await addImageService(id, uploadedImages);
 
 	res.status(200).json({
 		message: "Image added successfully",
@@ -192,20 +166,7 @@ const updateLocation = AsyncHandler(async (req, res) => {
 	if (latitude === undefined || longitude === undefined) {
 		throw new ApiError(400, 'Latitude and Longitude are required');
 	}
-	const location = {
-		type: 'Point',
-		coordinates: [longitude, latitude]
-	};
-	const updatedListing = await Listing.findByIdAndUpdate(
-		id,
-		{ location },
-		{ new: true }
-	);
-
-	if (!updatedListing) {
-		throw new ApiError(400, "Listing not found");
-	}
-
+	const updatedListing = await updateLocationService(id, { latitude, longitude });
 	res.status(200).json({
 		message: "Location updated successfully",
 		data: updatedListing
@@ -219,14 +180,7 @@ const updateTagsAndCategories = AsyncHandler(async (req, res) => {
 
 	if (tags !== undefined) updateData.tags = tags;
 	if (categories !== undefined) updateData.categories = categories;
-	const updatedListing = await Listing.findByIdAndUpdate(
-		id,
-		updateData,
-		{ new: true }
-	);
-	if (!updatedListing) {
-		throw new ApiError(400, "Listing not found");
-	}
+	const updatedListing = await updateTagsAndCategoriesService(id, updateData);
 	res.status(200).json({
 		message: "Tags and Categories updated successfully",
 		data: updatedListing
@@ -244,44 +198,24 @@ const sendSuggestionEmail = AsyncHandler(async (req, res) => {
 	if (!listing) {
 		throw new ApiError(404, 'Listing not found');
 	}
-	const recipient = "rishirijal2025@gmail.com";
+	const recipient = process.env.DEFAULT_EMAIL_TO;
 
 	const listingUrl = `${(process.env.FRONTEND_URL || '').replace(/\/$/, '')}/listing/${id}`;
 
-	const smtpPort = Number(process.env.SMTP_PORT) || 465;
-	const smtpSecure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : smtpPort === 465;
-
-	const transporter = nodemailer.createTransport({
-		host: process.env.SMTP_HOST,
-		port: smtpPort,
-		secure: smtpSecure,
-		auth: {
-			user: process.env.SMTP_EMAIL,
-			pass: process.env.SMTP_PASSWORD,
-		},
-	});
 
 	const subject = `Suggestion for listing: ${listing.name} — ${field}`;
 	const reporterInfo = (name || email) ? `${name}${email ? ` &lt;${email}&gt;` : ''}` : 'Anonymous';
 	const text = `A suggestion was submitted for listing "${listing.name}" (ID: ${id}).\n\nField: ${field}\nSuggestion:\n${suggestion}\n\nReporter: ${reporterInfo}\n\n Email: ${email}\nListing: ${listingUrl}`;
 	const html = `
-  <p>A suggestion was submitted for listing <strong>${listing.name}</strong> (ID: ${id}).</p>
-  <p><strong>Field:</strong> ${field}</p>
-  <p><strong>Suggestion:</strong><br/>${suggestion.replace(/\n/g, '<br/>')}</p>
-  <p><strong>Reporter:</strong> ${reporterInfo}</p>
-  <p>Email: ${email}</p>
-  <p><a href="${listingUrl}">View listing</a></p>
-  `;
+		<p>A suggestion was submitted for listing <strong>${listing.name}</strong> (ID: ${id}).</p>
+		<p><strong>Field:</strong> ${field}</p>
+		<p><strong>Suggestion:</strong><br/>${suggestion.replace(/\n/g, '<br/>')}</p>
+		<p><strong>Reporter:</strong> ${reporterInfo}</p>
+		<p>Email: ${email}</p>
+		<p><a href="${listingUrl}">View listing</a></p>
+		`;
 
-	const mailOptions = {
-		from: `${'Unhide Nepal'} <${process.env.SMTP_EMAIL}>`,
-		to: recipient,
-		subject,
-		text,
-		html,
-	};
-
-	await transporter.sendMail(mailOptions);
+	await sendEmail(recipient, subject, text, html);
 	return res.status(200).json({ success: true, message: 'Suggestion submitted' });
 });
 

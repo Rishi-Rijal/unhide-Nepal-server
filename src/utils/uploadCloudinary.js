@@ -50,4 +50,12 @@ const uploadImages = async (images) => {
     return uploadedImages;
 }
 
-export {uploadOnCloudinary, removeFromCloudinary, uploadImages};
+const removeImages = async (images) => {
+    await Promise.all(
+        images.map(async (img) => {
+            await removeFromCloudinary(img.public_id);
+        })
+    );
+}
+
+export {uploadOnCloudinary, removeFromCloudinary, uploadImages, removeImages};

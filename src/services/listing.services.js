@@ -2,7 +2,6 @@ import Listing from '../models/listing.model.js';
 import User from '../models/user.model.js';
 import ApiError from '../utils/ApiError.js';
 import mongoose from 'mongoose';
-import { removeFromCloudinary } from '../utils/uploadCloudinary.js';
 import { decodeCursor, encodeCursor } from '../utils/cursor.js';
 import {
 	buildMatchStage,
@@ -10,6 +9,7 @@ import {
 	buildCursorStage,
 	generateNextCursorData
 } from './pipelines.services.js';
+import { removeImages } from '../utils/uploadCloudinary.js';
 
 const createListingService = async (data) => {
 	const {
@@ -264,8 +264,78 @@ const updateTipsService = async (listingId, updateData) => {
 	return updatedListing;
 };
 
+const updateTitleService = async (listingId, updateData) => {
+	const updatedListing = await Listing.findByIdAndUpdate(
+		listingId,
+		{ name: updateData },
+		{ new: true }
+	);
+
+	if (!updatedListing) {
+		throw new ApiError(400, "Listing not found");
+	}
+
+	return updatedListing;
+};
+
+const removeImageService = async (listingId, imagePublicId) => {
+	const listing = await Listing.findByIdAndUpdate(
+		listingId,
+		{ $pull: { images: { public_id: imagePublicId } } },
+		{ new: true });
+	if (!listing) {
+		throw new ApiError(400, "Listing not found");
+	}
+	await removeImages([{ public_id: imagePublicId }]);
+	return listing;
+};
+
+const addImageService = async (listingId, uploadedImages) => {
+	const listing = await Listing.findByIdAndUpdate(
+		listingId,
+		{ $push: { images: { $each: uploadedImages } } },
+		{ new: true }
+	)
+	if (!listing) {
+		throw new ApiError(400, "Listing not found");
+	}
+	return listing;
+};
+
+const updateLocationService = async (listingId, { latitude, longitude }) => {
+	const location = {
+		type: 'Point',
+		coordinates: [longitude, latitude]
+	};
+	const updatedListing = await Listing.findByIdAndUpdate(
+		id,
+		{ location },
+		{ new: true }
+	);
+
+	if (!updatedListing) {
+		throw new ApiError(400, "Listing not found");
+	}
+
+	return updatedListing;
+};
+
+const updateTagsAndCategoriesService = async (listingId, updateData) => {
+	const updatedListing = await Listing.findByIdAndUpdate(
+		listingId,
+		updateData,
+		{ new: true }
+	);
+	if (!updatedListing) {
+		throw new ApiError(400, "Listing not found");
+	}
+	return updatedListing;
+};
+
 export {
 	createListingService, getListingService, deleteListingService,
 	getFilteredListingsService, likeListingService, unlikeListingService,
-	updateDescriptionService, updateTipsService,
+	updateDescriptionService, updateTipsService, updateTitleService,
+	removeImageService, addImageService, updateLocationService,
+	updateTagsAndCategoriesService,
 };

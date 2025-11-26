@@ -79,13 +79,17 @@ const listingSchema = new mongoose.Schema(
       type: Boolean,
       default: false
     },
+    permitsDescription: {
+      type: String,
+      trim: true
+    },
     bestSeason: {
       type: String,
       trim: true
     },
     difficulty: {
       type: String,
-      enum: ["Easy", "Moderate", "Challenging"]
+      enum: ["Easy", "Moderate", "Challenging", "Extreme"]
     },
     extraAdvice: {
       type: String,

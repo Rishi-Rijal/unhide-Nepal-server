@@ -2,6 +2,7 @@ import mongoose from "mongoose"
 import jwt from "jsonwebtoken"
 import bcrypt from "bcrypt"
 import crypto from "crypto"
+import "dotenv/config";
 
 const userSchema = new mongoose.Schema(
     {
@@ -36,6 +37,10 @@ const userSchema = new mongoose.Schema(
             type: Date,
             select: false,
         },
+        listings: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Listing"
+        }]
     }, { timestamps: true });
 
 userSchema.pre("save", async function (next) {

@@ -1,6 +1,7 @@
 import AsyncHandler from "../utils/asyncHandler.js";
 import ApiError from "../utils/ApiError.js";
 import nodemailer from "nodemailer";
+import "dotenv/config";
 
 const sendContactMessage = AsyncHandler(async (req, res) => {
   const { name, email, message } = req.body || {};

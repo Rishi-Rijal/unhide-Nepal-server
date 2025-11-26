@@ -1,9 +1,7 @@
 import { Router } from "express";
 import {
     createListing,
-    getListings,
     getListing,
-    updateListing,
     deleteListing,
     getListingFiltered,
     likeListing,
@@ -26,7 +24,6 @@ const router = Router();
 // changed from `/all` to `/` for a standard RESTful collection endpoint
 router
     .route("/")
-    .get(getListings)
     .post(verifyJWT, upload.fields([{ name: "images", maxCount: 50 }]), createListing);
 
 router
@@ -36,7 +33,6 @@ router
 router
     .route("/:id")
     .get(getListing)
-    .patch(verifyJWT, verifyAdminOrOwner, updateListing)
     .delete(verifyJWT, verifyAdmin, deleteListing);
 
 router

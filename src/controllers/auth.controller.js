@@ -3,6 +3,7 @@ import { ApiError } from "../utils/ApiError.js";
 import AsyncHandler from "../utils/asyncHandler.js";
 import jwt from "jsonwebtoken";
 import Listing from "../models/listing.model.js";
+import "dotenv/config";
 
 
 const verifyJWT = AsyncHandler(async (req, res, next) => {

@@ -3,8 +3,7 @@ import crypto from "crypto";
 import User from "../models/user.model.js";
 import ApiError from "../utils/ApiError.js";
 import AsyncHandler from "../utils/asyncHandler.js";
-import dotenv from "dotenv";
-dotenv.config();
+import "dotenv/config";
 import nodemailer from "nodemailer";
 
 const generateAccessAndRefreshToken = async (userId) => {

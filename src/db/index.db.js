@@ -1,7 +1,5 @@
-import dotenv from "dotenv";
 import mongoose from "mongoose";
-
-dotenv.config({ path: "./.env" });
+import "dotenv/config";
 
 // Prevent Mongoose from creating collections or building indexes automatically at runtime.
 // This avoids triggering Cosmos DB container provisioning or index builds during requests

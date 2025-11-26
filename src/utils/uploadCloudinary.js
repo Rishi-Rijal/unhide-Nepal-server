@@ -1,7 +1,6 @@
 import { v2 as cloudinary } from "cloudinary";
 import fs from "fs";
-import dotenv from "dotenv";
-dotenv.config({ path: "./.env" });
+import "dotenv/config";
 
 
 cloudinary.config({
@@ -36,4 +35,19 @@ const removeFromCloudinary = async (publicId) => {
     }   
 }
 
-export {uploadOnCloudinary, removeFromCloudinary};
+const uploadImages = async (images) => {
+    const uploadedImages = await Promise.all(
+            images.map(async (image) => {
+                const uploadResult = await uploadOnCloudinary(image.path);
+                if (!uploadResult) throw new ApiError(500, "Image upload failed");
+                return {
+                    url: uploadResult.secure_url,
+                    public_id: uploadResult.public_id,
+                    format: uploadResult.format
+                };
+            })
+        );
+    return uploadedImages;
+}
+
+export {uploadOnCloudinary, removeFromCloudinary, uploadImages};

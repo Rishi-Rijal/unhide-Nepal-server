@@ -1,0 +1,23 @@
+{
+  "env": {
+    "browser": true,
+    "es2021": true,
+    "node": true
+  },
+  "extends": [
+    "eslint:recommended",
+    // 1. Enables prettier as an ESLint plugin and sets the "prettier/prettier" rule.
+    "plugin:prettier/recommended"
+  ],
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "sourceType": "module"
+  },
+  "rules": {
+    // 2. Add custom rules here (e.g., code quality rules)
+    "no-unused-vars": "warn",
+    "prefer-const": "error",
+    // 3. This is the Prettier rule. Set it to "error" to get proper auto-fixing.
+    "prettier/prettier": "error" 
+  }
+}

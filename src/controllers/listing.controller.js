@@ -1,594 +1,270 @@
 import Listing from '../models/listing.model.js';
 import ApiError from '../utils/ApiError.js';
 import AsyncHandler from "../utils/asyncHandler.js"
-import { uploadOnCloudinary, removeFromCloudinary } from '../utils/uploadCloudinary.js';
-import { z } from "zod";
-import mongoose from "mongoose";
+import { uploadOnCloudinary, removeFromCloudinary, uploadImages } from '../utils/uploadCloudinary.js';
 import nodemailer from 'nodemailer';
-import User from '../models/user.model.js';
-
-/* ---------- validation helpers ---------- */
-
-const stringOrArray = z.union([
-  z.string().min(1).transform(v => v.trim()),
-  z.array(z.string().min(1).transform(v => v.trim()))
-])
-  .optional()
-  .transform(v => (Array.isArray(v) ? v : v ? [v] : []));
-
-
-const encode = (obj) => Buffer.from(JSON.stringify(obj)).toString("base64");
-const safeDecode = (s) => {
-  try { return JSON.parse(Buffer.from(s, "base64").toString("utf8")); }
-  catch { return null; }
-};
-const querySchema = z.object({
-  categories: stringOrArray,
-  tags: stringOrArray,
-  minRating: z.coerce.number().min(0).max(5).optional(),
-  difficulty: z.enum(["Easy", "Moderate", "Challenging"]).optional(),
-  verifiedOnly: z.union([z.literal("true"), z.literal("false")]).optional()
-    .transform((v) => (v === undefined ? undefined : v === "true")),
-
-  lat: z.coerce.number().optional(),
-  lng: z.coerce.number().optional(),
-  distanceKm: z.coerce.number().min(0).max(250).default(0),
-
-  sort: z.enum(["newest", "rating_desc", "rating_asc", "likes_desc", "likes_asc", "distance"]).default("rating_desc"),
-  limit: z.coerce.number().int().min(1).max(100).default(20),
-  cursor: z.string().optional(),
-}).refine((q) => (q.sort !== "distance") || (Number.isFinite(q.lat) && Number.isFinite(q.lng)), {
-  path: ["sort"],
-  message: "Distance sorting requires lat & lng",
-});
-
-
-/* ---------- controller functions ---------- */
-// create a new listing
+import { createListingSchema, filterListingsSchema, tipsSchema } from '../schemas/listing.schema.js';
+import {
+	createListingService,
+	getListingService,
+	deleteListingService,
+	getFilteredListingsService,
+	likeListingService,
+	unlikeListingService,
+	updateDescriptionService,
+	updateTipsService,
+} from '../services/listing.services.js';
+import "dotenv/config";
 
 const createListing = AsyncHandler(async (req, res) => {
-  const { name, description, categories, tags,
-     latitude, longitude, tipsPermits,
-      tipsBestSeason, tipsDifficulty, tipsExtra, physicalAddress   } = req.body;
-  if (!name || !description || !categories || !latitude || !longitude) {
-    throw new ApiError(400, 'Please provide all required fields');
-  }
+	const author = req.user?._id;
+	if (!author) {
+		throw new ApiError(401, 'Unauthorized');
+	}
 
-  const author = req.user?._id;
+	const parsedData = createListingSchema.safeParse({ ...req.body, author: author.toString() });
+	if (!parsedData.success) {
+		const errorMessage = parsedData.error.errors.map(e => e.message).join(', ');
+		throw new ApiError(400, errorMessage);
+	}
 
-  const location = {
-    type: 'Point',
-    coordinates: [longitude, latitude]
-  };
+	const images = req.files?.images || [];
+	const uploadedImages = await uploadImages(images);
 
-  const images = req.files?.images || [];
+	const newListing = await createListingService({ ...parsedData.data, uploadedImages });
 
-  const imagesInfo = await Promise.all(
-    images.map(async (image) => {
-      const uploadResult = await uploadOnCloudinary(image.path);
-      return { url: uploadResult.secure_url, public_id: uploadResult.public_id, format: uploadResult.format };
-    })
-  );
-
-  const newListing = await Listing.create({
-    name,
-    description,
-    categories,
-    tags,
-    location,
-    images: imagesInfo,
-    extraAdvice: tipsExtra || "",
-    bestSeason: tipsBestSeason,
-    difficulty: tipsDifficulty,
-    permits: tipsPermits,
-    physicalAddress: physicalAddress,
-    author,
-  });
-
-  const createdListing = await Listing.findById(newListing._id);
-  if (!createdListing) {
-    throw new ApiError(500, 'Failed to create listing');
-  }
-
-  res.status(201).json(newListing);
+	res.status(201).json({ message: 'Listing created successfully', data: newListing});
 });
 
-const getListings = AsyncHandler(async (req, res) => {
-  const listings = await Listing.find();
-  res.status(200).json(listings);
-});
 
 const getListing = AsyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const listing = await Listing.findById(id);
-  if (!listing) {
-    throw new ApiError(404, 'Listing not found');
-  }
+	const { id } = req.params;
 
-  // Include whether the current user has liked this listing (if user info is available)
-  const userId = req.user?.id || req.body?.userId || null;
-  const likedByUser = userId && Array.isArray(listing.likedBy)
-    ? listing.likedBy.some((uid) => uid.toString() === userId.toString())
-    : false;
-
-  const result = listing.toObject({ getters: true });
-  result.likedByUser = likedByUser;
-
-  res.status(200).json(result);
-});
-
-const updateListing = AsyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { name, description, categories, tags, latitude, longitude, photos, tips } = req.body;
-  if (!name || !description || !categories || !latitude || !longitude) {
-    throw new ApiError(400, 'Please provide all required fields');
-  }
-
-  const location = {
-    type: 'Point',
-    coordinates: [longitude, latitude]
-  };
-  const updatedListing = await Listing.findByIdAndUpdate(id, { ...req.body, location }, { new: true });
-  if (!updatedListing) {
-    throw new ApiError(404, 'Listing not found');
-  }
-
-  res.status(200).json(updatedListing);
+	const listing = await getListingService(id, req.user?._id);
+	res.status(200).json({ message: 'Listing retrieved successfully', data: listing });
 });
 
 const deleteListing = AsyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const deletedListing = await Listing.findByIdAndDelete(id);
-  if (!deletedListing) {
-    throw new ApiError(404, 'Listing not found');
-  }
-  for (const img of deletedListing.images) {
-    await removeFromCloudinary(img.public_id);
-  }
+	const { id } = req.params;
 
-  res.status(200).json({ message: 'Listing deleted successfully' });
+	await deleteListingService(id);
+	res.status(200).json({ message: 'Listing deleted successfully', data: null });
 });
 
 const getListingFiltered = AsyncHandler(async (req, res) => {
-  try {
-    const parsed = querySchema.safeParse(req.query ?? {})
-    if (!parsed.success) {
-      return res.status(400).json({
-        error: "Invalid query",
-        errors: parsed.error.issues.map((i) => ({ path: i.path.join("."), message: i.message })),
-      });
-    }
+	const parsed = filterListingsSchema.safeParse(req.query ?? {});
+	if (!parsed.success) {
+		const errorMessage = parsed.error.errors.map(e => e.message).join(', ');
+		throw new ApiError(400, errorMessage);
+	}
+	const listingsData = await getFilteredListingsService(parsed.data);
+	res.status(200).json({ message: 'Listings retrieved successfully', data: listingsData.data, nextCursor: listingsData.nextCursor, hasNextPage: listingsData.hasNextPage});
 
-    const {
-      categories, tags, minRating, difficulty, verifiedOnly,
-      lat, lng, distanceKm, sort, limit, cursor,
-    } = parsed.data;
-    const hasGeoPoint =
-      typeof lat === "number" &&
-      typeof lng === "number";
-
-    const hasGeoFilter =
-      hasGeoPoint &&
-      typeof distanceKm === "number" &&
-      distanceKm > 0;
-
-    if (sort === "distance" && !hasGeoPoint) {
-      return res.status(400).json({ error: "lat and lng are required for distance sort" });
-    }
-
-    const match = {};
-    if (verifiedOnly) match.isVerified = true;
-    if (categories?.length) match.categories = { $in: categories };
-    if (tags?.length) match.tags = { $in: tags };
-    if (minRating !== undefined) match.averageRating = { $gte: minRating };
-    if (difficulty) match.difficulty = difficulty;
-
-    // cursorMatch based on sort tuple
-    const cursorMatch = {};
-    const c = cursor ? safeDecode(cursor) : null;
-    if (cursor && !c) return res.status(400).json({ error: "Invalid cursor" });
-    if (c && c._id && !mongoose.isValidObjectId(c._id)) {
-      return res.status(400).json({ error: "Invalid cursor _id" });
-    }
-
-    if (c) {
-      if (sort === "newest" || !sort) {
-        cursorMatch.$or = [
-          { createdAt: { $lt: new Date(c.createdAt) } },
-          { createdAt: new Date(c.createdAt), _id: { $lt: mongoose.Types.ObjectId.createFromHexString(c._id) } },
-        ];
-      } else if (sort === "rating_desc") {
-        cursorMatch.$or = [
-          { averageRating: { $lt: c.averageRating } },
-          { averageRating: c.averageRating, createdAt: { $lt: new Date(c.createdAt) } },
-          { averageRating: c.averageRating, createdAt: new Date(c.createdAt), _id: { $lt: mongoose.Types.ObjectId.createFromHexString(c._id) } },
-        ];
-      } else if (sort === "rating_asc") {
-        cursorMatch.$or = [
-          { averageRating: { $gt: c.averageRating } },
-          { averageRating: c.averageRating, createdAt: { $lt: new Date(c.createdAt) } },
-          { averageRating: c.averageRating, createdAt: new Date(c.createdAt), _id: { $lt: mongoose.Types.ObjectId.createFromHexString(c._id) } },
-        ];
-      } else if (sort === "likes_desc") {
-        cursorMatch.$or = [
-          { likesCount: { $lt: c.likesCount } },
-          { likesCount: c.likesCount, createdAt: { $lt: new Date(c.createdAt) } },
-          { likesCount: c.likesCount, createdAt: new Date(c.createdAt), _id: { $lt: mongoose.Types.ObjectId.createFromHexString(c._id) } },
-        ];
-      } else if (sort === "likes_asc") {
-        cursorMatch.$or = [
-          { likesCount: { $gt: c.likesCount } },
-          { likesCount: c.likesCount, createdAt: { $lt: new Date(c.createdAt) } },
-          { likesCount: c.likesCount, createdAt: new Date(c.createdAt), _id: { $lt: mongoose.Types.ObjectId.createFromHexString(c._id) } },
-        ];
-      } else if (sort === "distance") {
-        cursorMatch.$or = [
-          { distanceMeters: { $gt: c.distanceMeters } },
-          { distanceMeters: c.distanceMeters, averageRating: { $lt: (c.averageRating ?? 0) } },
-          { distanceMeters: c.distanceMeters, averageRating: (c.averageRating ?? 0), createdAt: { $lt: new Date(c.createdAt) } },
-          { distanceMeters: c.distanceMeters, averageRating: (c.averageRating ?? 0), createdAt: new Date(c.createdAt), _id: { $lt: mongoose.Types.ObjectId.createFromHexString(c._id) } },
-        ];
-      }
-    }
-
-    const pipeline = [];
-    const shouldRunGeoNear = hasGeoFilter || sort === "distance";
-
-    if (shouldRunGeoNear) {
-      const geo = {
-        near: { type: "Point", coordinates: [lng, lat] },
-        distanceField: "distanceMeters",
-        spherical: true,
-        key: "location",
-      };
-
-      if (hasGeoFilter) {
-        geo.maxDistance = distanceKm * 1000;
-      }
-
-      if (Object.keys(match).length) {
-        geo.query = match;
-      }
-
-      pipeline.push({ $geoNear: geo });
-
-      if (Object.keys(cursorMatch).length) {
-        pipeline.push({ $match: cursorMatch });
-      }
-    } else {
-      if (Object.keys(match).length) pipeline.push({ $match: match });
-      if (Object.keys(cursorMatch).length) pipeline.push({ $match: cursorMatch });
-    }
-
-    // Project only what the list needs
-    pipeline.push({
-      $project: {
-        name: 1,
-        description: { $substrCP: ["$description", 0, 240] },
-        categories: 1,
-        tags: 1,
-        images: { $slice: ["$images", 1] },
-        averageRating: 1,
-        ratingsCount: 1,
-        likesCount: 1,
-        createdAt: 1,
-        location: 1,
-        physicalAddress: 1,
-        ...(shouldRunGeoNear ? { distanceMeters: 1 } : {}),
-      },
-    });
-
-    if (sort === "newest") {
-      pipeline.push({ $sort: { createdAt: -1, _id: -1 } });
-    } else if (sort === "rating_desc") {
-      pipeline.push({ $sort: { averageRating: -1, createdAt: -1, _id: -1 } });
-    } else if (sort === "rating_asc") {
-      pipeline.push({ $sort: { averageRating: 1, createdAt: -1, _id: -1 } });
-    } else if (sort === "likes_desc") {
-      pipeline.push({ $sort: { likesCount: -1, createdAt: -1, _id: -1 } });
-    } else if (sort === "likes_asc") {
-      pipeline.push({ $sort: { likesCount: 1, createdAt: -1, _id: -1 } });
-    } else if (sort === "distance") {
-      pipeline.push({ $sort: { distanceMeters: 1, averageRating: -1, createdAt: -1, _id: -1 } });
-    } else {
-      // default: newest
-      pipeline.push({ $sort: { createdAt: -1, _id: -1 } });
-    }
-
-
-    // Fetch one extra to detect next page
-    pipeline.push({ $limit: limit + 1 });
-
-    const rows = await Listing.aggregate(pipeline).allowDiskUse(true);
-    const hasNextPage = rows.length > limit;
-    const data = hasNextPage ? rows.slice(0, limit) : rows;
-
-    // Build next cursor
-    let nextCursor = null;
-    if (hasNextPage && data.length) {
-      const last = data[data.length - 1];
-
-      if (sort === "newest" || !sort) {
-        nextCursor = encode({ createdAt: last.createdAt, _id: last._id });
-      } else if (sort === "rating_desc" || sort === "rating_asc") {
-        nextCursor = encode({
-          averageRating: last.averageRating ?? 0,
-          createdAt: last.createdAt,
-          _id: last._id,
-        });
-      } else if (sort === "likes_desc" || sort === "likes_asc") {
-        nextCursor = encode({
-          likesCount: last.likesCount ?? 0,
-          createdAt: last.createdAt,
-          _id: last._id,
-        });
-      } else if (sort === "distance") {
-        nextCursor = encode({
-          distanceMeters: last.distanceMeters ?? 0,
-          averageRating: last.averageRating ?? 0,
-          createdAt: last.createdAt,
-          _id: last._id,
-        });
-      } else {
-        // if unknown sort then treat like newest
-        nextCursor = encode({ createdAt: last.createdAt, _id: last._id });
-      }
-    }
-    res.json({ data, nextCursor, hasNextPage });
-  } catch (err) {
-    throw new ApiError(500, "Failed to fetch listings")
-  }
 });
 
 const likeListing = AsyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const userId = req.user?.id || req.body?.userId || null;
-  if (!id) throw new ApiError(400, "id is required");
+	const { id } = req.params;
+	const userId = req.user?.id || req.body?.userId || null;
 
-  const listing = await Listing.findById(id);
-  if (!listing) throw new ApiError(404, "Listing not found");
-
-  // If we have a user id, enforce per-user uniqueness using likedBy
-  if (userId) {
-    const alreadyLiked = Array.isArray(listing.likedBy) && listing.likedBy.some((uid) => uid.toString() === userId.toString());
-    if (alreadyLiked) {
-      return res.status(200).json({ message: "Already liked", data: listing });
-    }
-
-    listing.likedBy = listing.likedBy || [];
-    listing.likedBy.push(mongoose.Types.ObjectId(userId));
-  }
-
-  // Always increment the public likesCount (anonymous likes are allowed)
-  listing.likesCount = (listing.likesCount || 0) + 1;
-  await listing.save();
-
-  res.status(200).json({ message: "Like added successfully", data: listing });
+	const liked = await likeListingService(id, userId);
+	res.status(200).json(liked);
 });
 
 const unlikeListing = AsyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const userId = req.user?.id || req.body?.userId || null;
-  if (!id) throw new ApiError(400, "id is required");
+	const { id } = req.params;
+	if (!id) {
+		throw new ApiError(400, "Listing ID is required");
+	}
+	const userId = req.user?.id || req.body?.userId || null;
 
-  const listing = await Listing.findById(id);
-  if (!listing) throw new ApiError(404, "Listing not found");
-
-  // If userId present, enforce that they previously liked
-  if (userId) {
-    if (!Array.isArray(listing.likedBy) || !listing.likedBy.some((uid) => uid.toString() === userId.toString())) {
-      return res.status(200).json({ message: "Not previously liked", data: listing });
-    }
-
-    listing.likedBy = listing.likedBy.filter((uid) => uid.toString() !== userId.toString());
-    listing.likesCount = Math.max(0, (listing.likesCount || 1) - 1);
-    await listing.save();
-
-    return res.status(200).json({ message: "Like removed successfully", data: listing });
-  }
-
-  // Anonymous unlike: allow decrement (client is expected to track ownership via localStorage)
-  listing.likesCount = Math.max(0, (listing.likesCount || 1) - 1);
-  await listing.save();
-  res.status(200).json({ message: "Like removed successfully", data: listing });
-
+	const unLiked = await unlikeListingService(id, userId);
+	res.status(200).json(unLiked);
 });
 
 const updateDescription = AsyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { description } = req.body;
-  if (!description) {
-    throw new ApiError(400, 'Description is required');
-  }
-  const updatedListing = await Listing.findByIdAndUpdate(
-    id,
-    { description },
-    { new: true }
-  );
-
-  if (!updatedListing) {
-    throw new ApiError(400, "Listing not found");
-  }
-
-  res.status(200).json({
-    message: "Description updated successfully",
-    data: updatedListing
-  });
+	const { id } = req.params;
+	const { description } = req.body;
+	if (!description) {
+		throw new ApiError(400, 'Description is required');
+	}
+	
+	const updatedListing = await updateDescriptionService(id, description);
+	res.status(200).json({message: "Description updated successfully", data: updatedListing});
 });
 
 const updateTips = AsyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { extraAdvice, bestSeason, difficulty, permits } = req.body;
-  const updateData = {};
+	const { id } = req.params;
+	const parsed = tipsSchema.safeParse(req.body);
+	console.log("Parsed tips data:", parsed);
+	if (!parsed.success) {
+		const errorMessage = parsed.error.errors.map(e => e.message).join(', ');
+		throw new ApiError(400, errorMessage);
+	}
+	const updateData = {};
 
-  if (extraAdvice !== undefined) updateData.extraAdvice = extraAdvice;
-  if (bestSeason !== undefined) updateData.bestSeason = bestSeason;
-  if (difficulty !== undefined) updateData.difficulty = difficulty;
-  if (permits !== undefined) updateData.permits = permits;
-  const updatedListing = await Listing.findByIdAndUpdate(
-    id,
-    updateData,
-    { new: true }
-  );
-  if (!updatedListing) {
-    throw new ApiError(400, "Listing not found");
-  }
-  res.status(200).json({
-    message: "Tips updated successfully",
-    data: updatedListing
-  });
+	if (parsed.data.extraAdvice !== undefined) updateData.extraAdvice = parsed.data.extraAdvice;
+	if (parsed.data.bestSeason !== undefined) updateData.bestSeason = parsed.data.bestSeason;
+	if (parsed.data.difficulty !== undefined) updateData.difficulty = parsed.data.difficulty;
+	if (parsed.data.permitsRequired !== undefined) updateData.permitsRequired = parsed.data.permitsRequired;
+	if (parsed.data.permitsDescription !== undefined) updateData.permitsDescription = parsed.data.permitsDescription;
+
+	const updatedListing = await updateTipsService(id, updateData);
+	res.status(200).json({
+		message: "Tips updated successfully",
+		data: updatedListing
+	});
 });
 
 const updateTitle = AsyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { title } = req.body; 
-  if (!title) {
-    throw new ApiError(400, 'Title is required');
-  }
-  const updatedListing = await Listing.findByIdAndUpdate(
-    id,
-    { name: title },
-    { new: true }
-  );
+	const { id } = req.params;
+	const { title } = req.body;
+	if (!title) {
+		throw new ApiError(400, 'Title is required');
+	}
+	const updatedListing = await Listing.findByIdAndUpdate(
+		id,
+		{ name: title },
+		{ new: true }
+	);
 
-  if (!updatedListing) {
-    throw new ApiError(400, "Listing not found");
-  }
+	if (!updatedListing) {
+		throw new ApiError(400, "Listing not found");
+	}
 
-  res.status(200).json({
-    message: "Title updated successfully",
-    data: updatedListing
-  });
+	res.status(200).json({
+		message: "Title updated successfully",
+		data: updatedListing
+	});
 });
 
 const removeImage = AsyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { public_id } = req.body; 
-  if (!public_id) {
-    throw new ApiError(400, 'public_id is required');
-  }
-  const listing = await Listing.findById(id);
-  if (!listing) {
-    throw new ApiError(400, "Listing not found");
-  } 
-  listing.images = listing.images.filter(img => img.public_id !== public_id);
-  await removeFromCloudinary(public_id);
-  await listing.save();
+	const { id } = req.params;
+	const { public_id } = req.body;
+	if (!public_id) {
+		throw new ApiError(400, 'public_id is required');
+	}
+	const listing = await Listing.findById(id);
+	if (!listing) {
+		throw new ApiError(400, "Listing not found");
+	}
+	listing.images = listing.images.filter(img => img.public_id !== public_id);
+	await removeFromCloudinary(public_id);
+	await listing.save();
 
-  res.status(200).json({
-    message: "Image removed successfully",
-    data: listing
-  });
+	res.status(200).json({
+		message: "Image removed successfully",
+		data: listing
+	});
 });
 
 const addImage = AsyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const images = req.files?.images || []; 
-  if (images.length === 0) {
-    throw new ApiError(400, 'At least one image is required');
-  }
-  const listing = await Listing.findById(id);
-  if (!listing) {
-    throw new ApiError(400, "Listing not found");
-  }
-  const uploadedImages = await Promise.all(
-    images.map(async (image) => {
-      const uploadResult = await uploadOnCloudinary(image.path);
-      return {
-        url: uploadResult.secure_url,
-        public_id: uploadResult.public_id,
-      };
-    })
-  );
+	const { id } = req.params;
+	const images = req.files?.images || [];
+	if (images.length === 0) {
+		throw new ApiError(400, 'At least one image is required');
+	}
+	const listing = await Listing.findById(id);
+	if (!listing) {
+		throw new ApiError(400, "Listing not found");
+	}
+	const uploadedImages = await Promise.all(
+		images.map(async (image) => {
+			const uploadResult = await uploadOnCloudinary(image.path);
+			return {
+				url: uploadResult.secure_url,
+				public_id: uploadResult.public_id,
+			};
+		})
+	);
 
-  listing.images.push(...uploadedImages);
-  await listing.save();
+	listing.images.push(...uploadedImages);
+	await listing.save();
 
-  res.status(200).json({
-    message: "Image added successfully",
-    data: listing
-  });
+	res.status(200).json({
+		message: "Image added successfully",
+		data: listing
+	});
 });
 
 const updateLocation = AsyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { latitude, longitude } = req.body;   
-  if (latitude === undefined || longitude === undefined) {
-    throw new ApiError(400, 'Latitude and Longitude are required');
-  }
-  const location = {
-    type: 'Point',
-    coordinates: [longitude, latitude]
-  };
-  const updatedListing = await Listing.findByIdAndUpdate( 
-    id,
-    { location },
-    { new: true }
-  );
+	const { id } = req.params;
+	const { latitude, longitude } = req.body;
+	if (latitude === undefined || longitude === undefined) {
+		throw new ApiError(400, 'Latitude and Longitude are required');
+	}
+	const location = {
+		type: 'Point',
+		coordinates: [longitude, latitude]
+	};
+	const updatedListing = await Listing.findByIdAndUpdate(
+		id,
+		{ location },
+		{ new: true }
+	);
 
-  if (!updatedListing) {
-    throw new ApiError(400, "Listing not found");
-  }
+	if (!updatedListing) {
+		throw new ApiError(400, "Listing not found");
+	}
 
-  res.status(200).json({
-    message: "Location updated successfully",
-    data: updatedListing
-  });
-}); 
+	res.status(200).json({
+		message: "Location updated successfully",
+		data: updatedListing
+	});
+});
 
 const updateTagsAndCategories = AsyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { tags, categories } = req.body;
-  const updateData = {};
+	const { id } = req.params;
+	const { tags, categories } = req.body;
+	const updateData = {};
 
-  if (tags !== undefined) updateData.tags = tags;
-  if (categories !== undefined) updateData.categories = categories;
-  const updatedListing = await Listing.findByIdAndUpdate(
-    id,
-    updateData,
-    { new: true }
-  );
-  if (!updatedListing) {
-    throw new ApiError(400, "Listing not found");
-  }
-  res.status(200).json({
-    message: "Tags and Categories updated successfully",
-    data: updatedListing
-  });
+	if (tags !== undefined) updateData.tags = tags;
+	if (categories !== undefined) updateData.categories = categories;
+	const updatedListing = await Listing.findByIdAndUpdate(
+		id,
+		updateData,
+		{ new: true }
+	);
+	if (!updatedListing) {
+		throw new ApiError(400, "Listing not found");
+	}
+	res.status(200).json({
+		message: "Tags and Categories updated successfully",
+		data: updatedListing
+	});
 });
 
 const sendSuggestionEmail = AsyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { field, suggestion, name = "", email = "" } = req.body;
-  if (!field || !suggestion) {
-  throw new ApiError(400, 'Field and suggestion are required');
-  }
+	const { id } = req.params;
+	const { field, suggestion, name = "", email = "" } = req.body;
+	if (!field || !suggestion) {
+		throw new ApiError(400, 'Field and suggestion are required');
+	}
 
-  const listing = await Listing.findById(id).populate('author', 'email fullName');
-  if (!listing) {
-  throw new ApiError(404, 'Listing not found');
-  }
-  const recipient = "rishirijal2025@gmail.com";
+	const listing = await Listing.findById(id).populate('author', 'email fullName');
+	if (!listing) {
+		throw new ApiError(404, 'Listing not found');
+	}
+	const recipient = "rishirijal2025@gmail.com";
 
-  const listingUrl = `${(process.env.FRONTEND_URL || '').replace(/\/$/, '')}/listing/${id}`;
+	const listingUrl = `${(process.env.FRONTEND_URL || '').replace(/\/$/, '')}/listing/${id}`;
 
-  const smtpPort = Number(process.env.SMTP_PORT) || 465;
-  const smtpSecure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : smtpPort === 465;
+	const smtpPort = Number(process.env.SMTP_PORT) || 465;
+	const smtpSecure = process.env.SMTP_SECURE ? process.env.SMTP_SECURE === 'true' : smtpPort === 465;
 
-  const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: smtpPort,
-  secure: smtpSecure,
-  auth: {
-    user: process.env.SMTP_EMAIL,
-    pass: process.env.SMTP_PASSWORD,
-  },
-  });
+	const transporter = nodemailer.createTransport({
+		host: process.env.SMTP_HOST,
+		port: smtpPort,
+		secure: smtpSecure,
+		auth: {
+			user: process.env.SMTP_EMAIL,
+			pass: process.env.SMTP_PASSWORD,
+		},
+	});
 
-  const subject = `Suggestion for listing: ${listing.name} — ${field}`;
-  const reporterInfo = (name || email) ? `${name}${email ? ` &lt;${email}&gt;` : ''}` : 'Anonymous';
-  const text = `A suggestion was submitted for listing "${listing.name}" (ID: ${id}).\n\nField: ${field}\nSuggestion:\n${suggestion}\n\nReporter: ${reporterInfo}\n\n Email: ${email}\nListing: ${listingUrl}`;
-  const html = `
+	const subject = `Suggestion for listing: ${listing.name} — ${field}`;
+	const reporterInfo = (name || email) ? `${name}${email ? ` &lt;${email}&gt;` : ''}` : 'Anonymous';
+	const text = `A suggestion was submitted for listing "${listing.name}" (ID: ${id}).\n\nField: ${field}\nSuggestion:\n${suggestion}\n\nReporter: ${reporterInfo}\n\n Email: ${email}\nListing: ${listingUrl}`;
+	const html = `
   <p>A suggestion was submitted for listing <strong>${listing.name}</strong> (ID: ${id}).</p>
   <p><strong>Field:</strong> ${field}</p>
   <p><strong>Suggestion:</strong><br/>${suggestion.replace(/\n/g, '<br/>')}</p>
@@ -597,33 +273,31 @@ const sendSuggestionEmail = AsyncHandler(async (req, res) => {
   <p><a href="${listingUrl}">View listing</a></p>
   `;
 
-  const mailOptions = {
-    from: `${'Unhide Nepal'} <${process.env.SMTP_EMAIL}>`,
-    to: recipient,
-    subject,
-    text,
-    html,
-  };
+	const mailOptions = {
+		from: `${'Unhide Nepal'} <${process.env.SMTP_EMAIL}>`,
+		to: recipient,
+		subject,
+		text,
+		html,
+	};
 
-  await transporter.sendMail(mailOptions);
-  return res.status(200).json({ success: true, message: 'Suggestion submitted' });
+	await transporter.sendMail(mailOptions);
+	return res.status(200).json({ success: true, message: 'Suggestion submitted' });
 });
 
 export {
-  createListing,
-  getListings,
-  getListing,
-  updateListing,
-  deleteListing,
-  getListingFiltered,
-  likeListing,
-  unlikeListing,
-  updateDescription,
-  updateTips,
-  updateTitle,
-  updateLocation,
-  removeImage,
-  addImage,
-  updateTagsAndCategories,
-  sendSuggestionEmail,
+	createListing,
+	getListing,
+	deleteListing,
+	getListingFiltered,
+	likeListing,
+	unlikeListing,
+	updateDescription,
+	updateTips,
+	updateTitle,
+	updateLocation,
+	removeImage,
+	addImage,
+	updateTagsAndCategories,
+	sendSuggestionEmail,
 };

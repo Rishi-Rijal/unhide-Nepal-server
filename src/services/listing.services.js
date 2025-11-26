@@ -82,11 +82,10 @@ const deleteListingService = async (listingId) => {
 	const deletedListing = await Listing.findByIdAndDelete(listingId);
 	if (!deletedListing) {
 		throw new ApiError(404, 'Listing not found');
-	}
-
+	}	
 	deletedListing.images.map(async (img) => {
 		try {
-			await removeFromCloudinary(img.public_id);
+			await removeImages([img.public_id]);
 		} catch (err) {
 			throw new ApiError(500, "Error removing image from Cloudinary");
 		}

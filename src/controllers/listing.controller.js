@@ -26,13 +26,14 @@ const createListing = AsyncHandler(async (req, res) => {
 	if (!author) {
 		throw new ApiError(401, 'Unauthorized');
 	}
-
+	console.log("Request body:", req.body);
 	const parsedData = createListingSchema.safeParse({ ...req.body, author: author.toString() });
 	if (!parsedData.success) {
+		console.log("Validation errors:", parsedData.error);
 		const errorMessage = parsedData.error.errors.map(e => e.message).join(', ');
 		throw new ApiError(400, errorMessage);
 	}
-
+	console.log("Parsed listing data:", parsedData.data);
 	const images = req.files?.images || [];
 	const uploadedImages = await uploadImages(images);
 

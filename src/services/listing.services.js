@@ -24,9 +24,6 @@ const createListingService = async (data) => {
 		coordinates: [longitude, latitude]
 	};
 
-	const session = await mongoose.startSession();
-	session.startTransaction();
-
 	try {
 		const [newListing] = await Listing.create([{
 			name,
@@ -53,15 +50,11 @@ const createListingService = async (data) => {
 		if (!userUpdate) {
 			throw new ApiError(404, "User not found");
 		}
-		await session.commitTransaction();
 
 		return newListing;
 	} catch (error) {
-		await session.abortTransaction();
 		throw error;
-	} finally {
-		session.endSession();
-	}
+	} 
 };
 
 const getListingService = async (listingId, userId) => {

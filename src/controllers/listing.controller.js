@@ -219,6 +219,27 @@ const sendSuggestionEmail = AsyncHandler(async (req, res) => {
 	return res.status(200).json({ success: true, message: 'Suggestion submitted' });
 });
 
+const createListingWithAgent = AsyncHandler(async (req, res) => {
+	const { place } = req.body;
+	const authorId = req.user?._id;
+	
+	if (!authorId) {
+		throw new ApiError(401, 'Unauthorized - user not authenticated');
+	}
+	
+	if (!place) {
+		throw new ApiError(400, 'Place name is required');
+	}
+	const { testAddListingAgent } = await import('./agent.controller.js');
+	
+	const result = await testAddListingAgent(place, authorId.toString());
+	
+	res.status(201).json({ 
+		message: 'Listing created successfully with AI agent', 
+		data: result 
+	});
+});
+
 export {
 	createListing,
 	getListing,
@@ -234,4 +255,5 @@ export {
 	addImage,
 	updateTagsAndCategories,
 	sendSuggestionEmail,
+	createListingWithAgent,
 };

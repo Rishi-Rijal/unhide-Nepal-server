@@ -1,10 +1,10 @@
 import mongoose from "mongoose";
 
-const CATEGORY_ENUM = [
+export const CATEGORY_ENUM = [
   "Nature", "Adventure", "Culture", "Spiritual", "Wildlife", "Relaxation", "Lifestyle", "Themes",
 ];
 
-const TAGS = [
+export const TAGS = [
   "Mountains", "Hills", "Lakes", "Rivers", "Waterfalls", "Forests", "National Parks", "Caves",
   "Viewpoints", "Sunrise Spots", "Trekking", "Hiking", "Rafting", "Kayaking", "Paragliding",
   "Bungee Jumping", "Zipline", "Rock Climbing", "Mountain Biking", "Camping", "Canyoning",

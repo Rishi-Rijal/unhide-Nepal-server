@@ -340,10 +340,15 @@ const updateTagsAndCategoriesService = async (listingId, updateData) => {
 	return updatedListing;
 };
 
+const getAllListingsService = async () => {
+	const listings = await Listing.find();
+	return listings;
+}
+
 export {
 	createListingService, getListingService, deleteListingService,
 	getFilteredListingsService, likeListingService, unlikeListingService,
 	updateDescriptionService, updateTipsService, updateTitleService,
 	removeImageService, addImageService, updateLocationService,
-	updateTagsAndCategoriesService,
+	updateTagsAndCategoriesService, getAllListingsService,
 };

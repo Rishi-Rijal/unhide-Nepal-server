@@ -14,6 +14,7 @@ import {
     addImage,
     updateTagsAndCategories,
     sendSuggestionEmail,
+    createListingWithAgent,
 } from "../controllers/listing.controller.js";
 import { upload } from "../middlewares/multer.middleware.js";
 import { verifyJWT, verifyAdmin, verifyAdminOrOwner } from "../controllers/auth.controller.js";
@@ -23,6 +24,10 @@ const router = Router();
 router
     .route("/")
     .post(verifyJWT, upload.fields([{ name: "images", maxCount: 50 }]), createListing);
+
+router
+    .route("/agent")
+    .post(verifyJWT, verifyAdmin, createListingWithAgent);
 
 router
     .route("/filter")
